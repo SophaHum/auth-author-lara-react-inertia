@@ -74,10 +74,6 @@ This project is a React application powered by Vite, integrated with Laravel for
 - **CreateAdminUserSeeder**: Creates an admin user with all permissions.
 - **UserRoleSeeder**: Creates Manager, Editor, and User roles with sample users.
 
-### Example
-
-- **php artisan db:seed**
-
 ## Usage
 
 - Access the application at `http://localhost:3000` (frontend) and `http://localhost:8000` (backend).
