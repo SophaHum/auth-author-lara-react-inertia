@@ -36,7 +36,6 @@ This project is a React application powered by Vite, integrated with Laravel for
    - In the `.env` file, set the database connection to SQLite:
      ```
      DB_CONNECTION=sqlite
-     DB_DATABASE=/absolute/path/to/database.sqlite
      ```
    - Create the SQLite database file:
      ```bash
