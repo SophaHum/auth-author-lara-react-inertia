@@ -6,7 +6,7 @@ This project is a React application powered by Vite, integrated with Laravel for
 
 - PHP >= 8.3
 - Composer
-- Node.js >= 14.x
+- Node.js >= 18.x
 - NPM or Yarn
 
 ## Installation
