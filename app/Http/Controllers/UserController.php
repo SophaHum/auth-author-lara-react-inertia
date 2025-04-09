@@ -7,6 +7,9 @@ use Inertia\Inertia;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -17,7 +20,7 @@ class UserController extends Controller
     {
         try {
             // Get users with extra error handling and simplify data structure
-            $users = User::select(['id', 'name', 'email', 'username', 'role', 'created_at', 'updated_at'])
+            $users = User::with('roles')
                           ->orderBy('id', 'desc')
                           ->limit(100) // Limit to prevent large data loads
                           ->get()
@@ -27,23 +30,27 @@ class UserController extends Controller
                                   'id' => $user->id,
                                   'name' => $user->name,
                                   'email' => $user->email,
-                                  'username' => $user->username,
-                                  'role' => $user->role,
+                                  'role' => $user->getRoleNames()->first(), // Get the first role name
                                   'created_at' => $user->created_at->format('Y-m-d H:i:s'),
                                   'updated_at' => $user->updated_at->format('Y-m-d H:i:s'),
                               ];
                           })
                           ->toArray();
-            
+
+            // Get all roles for the dropdown
+            $roles = Role::select('id', 'name')->orderBy('name')->get();
+
             return Inertia::render('users/index', [
                 'users' => $users,
+                'roles' => $roles,
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error fetching users: ' . $e->getMessage());
-            
+            Log::error('Error fetching users: ' . $e->getMessage());
+
             // Return with empty users array and clear error message
             return Inertia::render('users/index', [
                 'users' => [],
+                'roles' => [],
                 'error' => 'Failed to load users. Please try again.'
             ]);
         }
@@ -54,7 +61,11 @@ class UserController extends Controller
      */
     public function create()
     {
-        return Inertia::render('users/create');
+        $roles = Role::select('id', 'name')->orderBy('name')->get();
+
+        return Inertia::render('users/create', [
+            'roles' => $roles,
+        ]);
     }
 
     /**
@@ -65,18 +76,20 @@ class UserController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'username' => 'nullable|string|max:255|unique:users',
-            'role' => 'nullable|string|max:50',
+            'role' => 'nullable|string|exists:roles,name',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'username' => $validated['username'] ?? null,
-            'role' => $validated['role'] ?? 'user',
             'password' => Hash::make($validated['password']),
         ]);
+
+        // Assign role if provided
+        if (!empty($validated['role'])) {
+            $user->assignRole($validated['role']);
+        }
 
         return redirect()->route('users.index')->with('success', 'User created successfully');
     }
@@ -102,9 +115,14 @@ class UserController extends Controller
     public function edit(string $id)
     {
         try {
-            $user = User::findOrFail($id);
+            $user = User::with('roles')->findOrFail($id);
+            $roles = Role::select('id', 'name')->orderBy('name')->get();
+
             return Inertia::render('users/edit', [
-                'user' => $user
+                'user' => array_merge($user->toArray(), [
+                    'role' => $user->getRoleNames()->first(),
+                ]),
+                'roles' => $roles,
             ]);
         } catch (\Exception $e) {
             return redirect()->route('users.index')->with('error', 'User not found');
@@ -117,7 +135,7 @@ class UserController extends Controller
     public function update(Request $request, string $id)
     {
         $user = User::findOrFail($id);
-        
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => [
@@ -127,21 +145,13 @@ class UserController extends Controller
                 'max:255',
                 Rule::unique('users')->ignore($user->id),
             ],
-            'username' => [
-                'nullable',
-                'string',
-                'max:255',
-                Rule::unique('users')->ignore($user->id),
-            ],
-            'role' => 'nullable|string|max:50',
+            'role' => 'nullable|string|exists:roles,name',
             'password' => 'nullable|string|min:8|confirmed',
         ]);
 
         $updateData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'username' => $validated['username'] ?? null,
-            'role' => $validated['role'] ?? $user->role,
         ];
 
         // Only update password if it's provided
@@ -150,6 +160,11 @@ class UserController extends Controller
         }
 
         $user->update($updateData);
+
+        // Sync roles if provided
+        if (isset($validated['role'])) {
+            $user->syncRoles([$validated['role']]);
+        }
 
         return redirect()->back()->with('success', 'User updated successfully');
     }
@@ -162,7 +177,7 @@ class UserController extends Controller
         try {
             $user = User::findOrFail($id);
             $user->delete();
-            
+
             return redirect()->route('users.index')->with('success', 'User deleted successfully');
         } catch (\Exception $e) {
             return redirect()->route('users.index')->with('error', 'Failed to delete user');

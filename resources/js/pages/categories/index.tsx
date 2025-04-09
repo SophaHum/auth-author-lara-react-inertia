@@ -18,26 +18,21 @@ import {
     Eye,
     Pencil,
     Trash,
-    UserPlus,
+    PlusCircle,
     Search,
-    X,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-    SlidersHorizontal
+    SlidersHorizontal,
+    X,
+    FolderIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import {
-  ViewUserDialog,
-  EditUserDialog,
-  CreateUserDialog,
-  DeleteUserDialog,
-} from '@/components/users/user-dialogs';
 import {
     Select,
     SelectContent,
@@ -55,138 +50,90 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ErrorBag, Errors } from '@inertiajs/core';
+import {
+    Category,
+    ViewCategoryDialog,
+    EditCategoryDialog,
+    CreateCategoryDialog,
+    DeleteCategoryDialog
+} from '@/components/categories/category-dialogs';
 
 type PageProps = {
-    users: any[];
+    categories: Category[];
     errors: Errors & ErrorBag;
-    deferred?: Record<string, string[] | undefined>;
 }
 
-export type User = {
-    id: string;
-    name: string;
-    email: string;
-    role?: string;
-    created_at?: string;
-    updated_at?: string;
-};
+const breadcrumbs: BreadcrumbItem[] = [
+    {
+        title: 'Categories',
+        href: '/categories',
+    },
+];
 
-// User component as default export
-export default function UserIndex() {
-    // Use a try-catch block for initial data processing
-    try {
-        const pageData = usePage().props as PageProps;
-        const users = Array.isArray(pageData.users) ? pageData.users : [];
+export default function Categories() {
+    const pageData = usePage().props as PageProps;
 
-        const breadcrumbs: BreadcrumbItem[] = [
-            { title: 'Users', href: '/users' },
-        ];
+    // Add debugging to see what data is coming from the backend
+    console.log('Categories page data:', pageData);
 
-        // Simple error boundary
-        const [hasError, setHasError] = useState(false);
+    const categories = Array.isArray(pageData.categories) ? pageData.categories : [];
 
-        useEffect(() => {
-            // Reset error state when component mounts or users change
-            setHasError(false);
-        }, []);
-
-        if (hasError) {
-            return (
-                <AppLayout breadcrumbs={breadcrumbs}>
-                    <div>
-                        <div>Something went wrong. Please try refreshing the page.</div>
-                        <Button
-                            onClick={() => window.location.reload()}
-                            className="ml-4"
-                        >
-                            Refresh
-                        </Button>
-                    </div>
-                </AppLayout>
-            );
-        }
-
-        return (
-            <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Users" />
-                <div className="w-full">
-                    <UserTable users={users} />
-                </div>
-            </AppLayout>
-        );
-    } catch (error) {
-        console.error("Failed to render UserIndex:", error);
-        return (
-            <div className="p-4">
-                <h1 className="text-xl font-bold">Error Loading Users</h1>
-                <p className="my-2">There was a problem loading this page. Please try reloading.</p>
-                <button
-                    className="px-4 py-2 bg-blue-500 text-white rounded"
-                    onClick={() => window.location.reload()}
-                >
-                    Reload Page
-                </button>
+    return (
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title="Categories" />
+            <div className="w-full">
+                <CategoriesTable categories={categories} />
             </div>
-        );
-    }
+        </AppLayout>
+    );
 }
 
-// Simplified UserTable component
-function UserTable({ users }: { users: any[] }) {
+function CategoriesTable({ categories }: { categories: Category[] }) {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = useState({});
     const [searchFilter, setSearchFilter] = useState("");
-    const [roleFilter, setRoleFilter] = useState<string | null>(null);
+    const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [pageSize, setPageSize] = useState(10);
     const [currentPage, setCurrentPage] = useState(0);
     const [filtersExpanded, setFiltersExpanded] = useState(false);
-    const [dateFilter, setDateFilter] = useState<{start?: string, end?: string}>({});
 
     // Dialog states
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
     const [viewDialogOpen, setViewDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-    // Simple table without complex features
-    const [tableData, setTableData] = useState<User[]>([]);
-    const [filteredData, setFilteredData] = useState<User[]>([]);
+    // Table data state
+    const [tableData, setTableData] = useState<Category[]>([]);
+    const [filteredData, setFilteredData] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Extract unique roles for filter dropdown
-    const availableRoles = React.useMemo(() => {
-        const roles = new Set<string>();
-        tableData.forEach(user => {
-            if (user.role) roles.add(user.role);
-        });
-        return Array.from(roles);
-    }, [tableData]);
-
-    // Safely process user data on mount only
+    // Process initial data
     useEffect(() => {
         try {
             setIsLoading(true);
-            const processedData = (users || []).map(user => ({
-                id: String(user?.id || ''),
-                name: String(user?.name || ''),
-                email: String(user?.email || ''),
-                role: String(user?.role || ''),
-                created_at: String(user?.created_at || ''),
-                updated_at: String(user?.updated_at || '')
+            const processedData = (categories || []).map(category => ({
+                id: String(category?.id || ''),
+                name: String(category?.name || ''),
+                description: String(category?.description || ''),
+                status: String(category?.status || 'active'),
+                product_count: Number(category?.product_count || 0),
+                created_at: String(category?.created_at || ''),
+                updated_at: String(category?.updated_at || '')
             }));
             setTableData(processedData);
             setFilteredData(processedData);
             setIsLoading(false);
         } catch (error) {
-            console.error("Error processing user data:", error);
+            console.error("Error processing category data:", error);
             setTableData([]);
             setFilteredData([]);
             setIsLoading(false);
         }
-    }, [users]);
+    }, [categories]);
 
     // Apply filters
     useEffect(() => {
@@ -195,44 +142,26 @@ function UserTable({ users }: { users: any[] }) {
         // Text search filter
         if (searchFilter) {
             const searchLower = searchFilter.toLowerCase();
-            result = result.filter(user =>
-                user.name.toLowerCase().includes(searchLower) ||
-                user.email.toLowerCase().includes(searchLower)
+            result = result.filter(category =>
+                category.name.toLowerCase().includes(searchLower) ||
+                (category.description && category.description.toLowerCase().includes(searchLower))
             );
         }
 
-        // Role filter
-        if (roleFilter) {
-            result = result.filter(user => user.role === roleFilter);
-        }
-
-        // Date range filter
-        if (dateFilter.start) {
-            result = result.filter(user => {
-                if (!user.created_at) return false;
-                const createdDate = new Date(user.created_at);
-                return createdDate >= new Date(dateFilter.start!);
-            });
-        }
-
-        if (dateFilter.end) {
-            result = result.filter(user => {
-                if (!user.created_at) return false;
-                const createdDate = new Date(user.created_at);
-                return createdDate <= new Date(dateFilter.end!);
-            });
+        // Status filter
+        if (statusFilter) {
+            result = result.filter(category => category.status === statusFilter);
         }
 
         setFilteredData(result);
-    }, [tableData, searchFilter, roleFilter, dateFilter]);
+    }, [tableData, searchFilter, statusFilter]);
 
     // Reset to first page when filters change
     useEffect(() => {
         setCurrentPage(0);
     }, [filteredData]);
 
-    // Simplified columns without complex interactivity
-    const columns: ColumnDef<User>[] = [
+    const columns: ColumnDef<Category>[] = [
         {
             accessorKey: 'id',
             header: ({ column }) => (
@@ -260,38 +189,47 @@ function UserTable({ users }: { users: any[] }) {
             cell: ({ row }) => <div className="font-medium">{row.getValue('name')}</div>,
         },
         {
-            accessorKey: 'email',
-            header: ({ column }) => (
-                <Button
-                    variant="ghost"
-                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                >
-                    Email
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-            ),
-            cell: ({ row }) => <div>{row.getValue('email')}</div>,
+            accessorKey: 'description',
+            header: 'Description',
+            cell: ({ row }) => {
+                const description = row.getValue('description') as string;
+                return <div className="truncate max-w-[200px]">{description || 'No description'}</div>;
+            },
         },
         {
-            accessorKey: 'role',
+            accessorKey: 'status',
             header: ({ column }) => (
                 <Button
                     variant="ghost"
                     onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
                 >
-                    Role
+                    Status
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
             ),
             cell: ({ row }) => {
-                const role = row.getValue('role') as string;
-                if (!role) return <Badge variant="outline">No Role</Badge>;
-
-                // Style the Admin role differently
-                if (role === 'Admin') {
-                    return <Badge variant="destructive">{role}</Badge>;
-                }
-                return <Badge variant="outline">{role}</Badge>;
+                const status = row.getValue('status') as string;
+                return (
+                    <Badge variant={status === 'active' ? 'default' : 'secondary'}>
+                        {status}
+                    </Badge>
+                );
+            },
+        },
+        {
+            accessorKey: 'product_count',
+            header: ({ column }) => (
+                <Button
+                    variant="ghost"
+                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                >
+                    Products
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                </Button>
+            ),
+            cell: ({ row }) => {
+                const count = row.getValue('product_count') as number;
+                return <div className="text-center">{count}</div>;
             },
         },
         {
@@ -319,16 +257,16 @@ function UserTable({ users }: { users: any[] }) {
             id: 'actions',
             header: 'Actions',
             cell: ({ row }) => {
-                const user = row.original;
+                const category = row.original;
 
                 return (
                     <div className="flex items-center justify-end space-x-2">
                         <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleView(user.id)}
+                            onClick={() => handleView(category.id)}
                             className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
-                            title="View User"
+                            title="View Category"
                         >
                             <Eye className="h-4 w-4" />
                             <span className="sr-only">View</span>
@@ -336,9 +274,9 @@ function UserTable({ users }: { users: any[] }) {
                         <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleEdit(user.id)}
+                            onClick={() => handleEdit(category.id)}
                             className="h-8 w-8 p-0 text-green-600 hover:text-green-800 hover:bg-green-100"
-                            title="Edit User"
+                            title="Edit Category"
                         >
                             <Pencil className="h-4 w-4" />
                             <span className="sr-only">Edit</span>
@@ -346,9 +284,9 @@ function UserTable({ users }: { users: any[] }) {
                         <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(user.id)}
+                            onClick={() => handleDelete(category.id)}
                             className="h-8 w-8 p-0 text-red-600 hover:text-red-800 hover:bg-red-100"
-                            title="Delete User"
+                            title="Delete Category"
                         >
                             <Trash className="h-4 w-4" />
                             <span className="sr-only">Delete</span>
@@ -359,7 +297,6 @@ function UserTable({ users }: { users: any[] }) {
         },
     ];
 
-    // Enhanced table configuration
     const table = useReactTable({
         data: filteredData,
         columns,
@@ -384,8 +321,12 @@ function UserTable({ users }: { users: any[] }) {
     // Reset all filters
     const resetFilters = () => {
         setSearchFilter("");
-        setRoleFilter(null);
-        setDateFilter({});
+        setStatusFilter(null);
+    };
+
+    // Toggle filters visibility
+    const toggleFilters = () => {
+        setFiltersExpanded(prev => !prev);
     };
 
     // Calculate pagination info
@@ -397,9 +338,9 @@ function UserTable({ users }: { users: any[] }) {
     // Action handlers
     const handleView = (id: string) => {
         try {
-            const user = tableData.find(user => user.id === id);
-            if (user) {
-                setSelectedUser(user);
+            const category = tableData.find(category => category.id === id);
+            if (category) {
+                setSelectedCategory(category);
                 setViewDialogOpen(true);
             }
         } catch (error) {
@@ -409,9 +350,9 @@ function UserTable({ users }: { users: any[] }) {
 
     const handleEdit = (id: string) => {
         try {
-            const user = tableData.find(user => user.id === id);
-            if (user) {
-                setSelectedUser(user);
+            const category = tableData.find(category => category.id === id);
+            if (category) {
+                setSelectedCategory(category);
                 setEditDialogOpen(true);
             }
         } catch (error) {
@@ -421,9 +362,9 @@ function UserTable({ users }: { users: any[] }) {
 
     const handleDelete = (id: string) => {
         try {
-            const user = tableData.find(user => user.id === id);
-            if (user) {
-                setSelectedUser(user);
+            const category = tableData.find(category => category.id === id);
+            if (category) {
+                setSelectedCategory(category);
                 setDeleteDialogOpen(true);
             }
         } catch (error) {
@@ -433,13 +374,13 @@ function UserTable({ users }: { users: any[] }) {
 
     const confirmDelete = () => {
         try {
-            if (!selectedUser) return;
+            if (!selectedCategory) return;
 
-            router.delete(`/users/${selectedUser.id}`, {
+            router.delete(`/categories/${selectedCategory.id}`, {
                 onSuccess: () => {
                     try {
                         setDeleteDialogOpen(false);
-                        setSelectedUser(null);
+                        setSelectedCategory(null);
                     } catch (error) {
                         console.error("Error cleaning up after delete:", error);
                     }
@@ -455,20 +396,27 @@ function UserTable({ users }: { users: any[] }) {
         }
     };
 
-    // Add this function to explicitly toggle filter visibility
-    const toggleFilters = () => {
-        setFiltersExpanded(prev => !prev);
-    };
-
-    // In case of table error, show a simplified interface
     if (tableData.length === 0 && !isLoading) {
         return (
-            <div className="p-4 border rounded">
-                <p>No users found or error loading users.</p>
-                <Button onClick={() => window.location.reload()} className="mt-2">
-                    Reload
-                </Button>
-            </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Categories</CardTitle>
+                    <CardDescription>Manage product categories</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col items-center justify-center space-y-4 py-8">
+                        <FolderIcon className="h-16 w-16 text-gray-400" />
+                        <div className="text-lg font-medium">No categories found</div>
+                        <div className="text-sm text-gray-500">
+                            Create your first category to organize your products
+                        </div>
+                        <Button onClick={() => setCreateDialogOpen(true)}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Create Category
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
         );
     }
 
@@ -477,24 +425,24 @@ function UserTable({ users }: { users: any[] }) {
             <Card>
                 <CardHeader className="pb-3">
                     <div className="flex justify-between items-center">
-                        <CardTitle>Users</CardTitle>
+                        <CardTitle>Categories</CardTitle>
                         <Button onClick={() => setCreateDialogOpen(true)} className="gap-1">
-                            <UserPlus className="h-4 w-4" />
-                            <span>Add User</span>
+                            <PlusCircle className="h-4 w-4" />
+                            <span>Add Category</span>
                         </Button>
                     </div>
                     <CardDescription>
-                        {/* Manage your users. You can view, add, edit, or delete users. */}
+                        Manage product categories
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Revised Filter Section with dark mode support */}
+                    {/* Filter Section */}
                     <div className="mb-4">
                         <div className="flex justify-between items-center mb-3">
                             <div className="flex items-center space-x-2">
                                 <Search className="h-4 w-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="Search users..."
+                                    placeholder="Search categories..."
                                     value={searchFilter}
                                     onChange={(e) => setSearchFilter(e.target.value)}
                                     className="w-[250px]"
@@ -510,7 +458,7 @@ function UserTable({ users }: { users: any[] }) {
                                     <SlidersHorizontal className="h-4 w-4" />
                                     {filtersExpanded ? 'Hide Filters' : 'Show Filters'}
                                 </Button>
-                                {(searchFilter || roleFilter || dateFilter.start || dateFilter.end) && (
+                                {(searchFilter || statusFilter) && (
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -527,53 +475,30 @@ function UserTable({ users }: { users: any[] }) {
                         {/* Filter content with dark mode support */}
                         {filtersExpanded && (
                             <div className="space-y-4 bg-muted/50 dark:bg-muted/20 p-4 rounded-md mt-3 animate-in fade-in-50 duration-200 border border-border">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground">Role</label>
+                                        <label className="text-sm font-medium text-foreground">Status</label>
                                         <Select
-                                            value={roleFilter ?? "all"}
-                                            onValueChange={(value) => setRoleFilter(value === "all" ? null : value)}
+                                            value={statusFilter ?? "all"}
+                                            onValueChange={(value) => setStatusFilter(value === "all" ? null : value)}
                                         >
                                             <SelectTrigger className="bg-background">
-                                                <SelectValue placeholder="Select role" />
+                                                <SelectValue placeholder="Select status" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="all">All Roles</SelectItem>
-                                                {availableRoles.map((role) => (
-                                                    <SelectItem key={role} value={role}>
-                                                        {role}
-                                                    </SelectItem>
-                                                ))}
+                                                <SelectItem value="all">All Statuses</SelectItem>
+                                                <SelectItem value="active">Active</SelectItem>
+                                                <SelectItem value="inactive">Inactive</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground">Date From</label>
-                                        <Input
-                                            type="date"
-                                            value={dateFilter.start || ''}
-                                            onChange={(e) => setDateFilter({...dateFilter, start: e.target.value})}
-                                            className="bg-background"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground">Date To</label>
-                                        <Input
-                                            type="date"
-                                            value={dateFilter.end || ''}
-                                            onChange={(e) => setDateFilter({...dateFilter, end: e.target.value})}
-                                            className="bg-background"
-                                        />
                                     </div>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Active Filters with dark mode support */}
-                    {(searchFilter || roleFilter || dateFilter.start || dateFilter.end) && (
+                    {/* Active Filters */}
+                    {(searchFilter || statusFilter) && (
                         <div className="flex flex-wrap gap-2 mb-4">
                             {searchFilter && (
                                 <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
@@ -584,30 +509,12 @@ function UserTable({ users }: { users: any[] }) {
                                     />
                                 </Badge>
                             )}
-                            {roleFilter && (
+                            {statusFilter && (
                                 <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
-                                    Role: {roleFilter}
+                                    Status: {statusFilter}
                                     <X
                                         className="h-3 w-3 cursor-pointer text-foreground/70 hover:text-foreground"
-                                        onClick={() => setRoleFilter(null)}
-                                    />
-                                </Badge>
-                            )}
-                            {dateFilter.start && (
-                                <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
-                                    From: {dateFilter.start}
-                                    <X
-                                        className="h-3 w-3 cursor-pointer text-foreground/70 hover:text-foreground"
-                                        onClick={() => setDateFilter({...dateFilter, start: undefined})}
-                                    />
-                                </Badge>
-                            )}
-                            {dateFilter.end && (
-                                <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
-                                    To: {dateFilter.end}
-                                    <X
-                                        className="h-3 w-3 cursor-pointer text-foreground/70 hover:text-foreground"
-                                        onClick={() => setDateFilter({...dateFilter, end: undefined})}
+                                        onClick={() => setStatusFilter(null)}
                                     />
                                 </Badge>
                             )}
@@ -619,7 +526,7 @@ function UserTable({ users }: { users: any[] }) {
                         <div className="flex justify-center items-center h-64">
                             <div className="text-center">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-                                <p className="mt-2">Loading users...</p>
+                                <p className="mt-2">Loading categories...</p>
                             </div>
                         </div>
                     ) : (
@@ -658,7 +565,7 @@ function UserTable({ users }: { users: any[] }) {
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={columns.length} className="h-24 text-center">
-                                                No users found matching your criteria.
+                                                No categories found matching your criteria.
                                             </TableCell>
                                         </TableRow>
                                     )}
@@ -685,7 +592,6 @@ function UserTable({ users }: { users: any[] }) {
                                 <SelectItem value="10">10 / page</SelectItem>
                                 <SelectItem value="25">25 / page</SelectItem>
                                 <SelectItem value="50">50 / page</SelectItem>
-                                <SelectItem value="100">100 / page</SelectItem>
                             </SelectContent>
                         </Select>
 
@@ -730,33 +636,33 @@ function UserTable({ users }: { users: any[] }) {
                 </CardFooter>
             </Card>
 
-            {/* Dialogs without error boundaries */}
+            {/* Dialogs */}
             {viewDialogOpen && (
-                <ViewUserDialog
-                    user={selectedUser}
+                <ViewCategoryDialog
+                    category={selectedCategory}
                     isOpen={viewDialogOpen}
                     onClose={() => setViewDialogOpen(false)}
                 />
             )}
 
             {editDialogOpen && (
-                <EditUserDialog
-                    user={selectedUser}
+                <EditCategoryDialog
+                    category={selectedCategory}
                     isOpen={editDialogOpen}
                     onClose={() => setEditDialogOpen(false)}
                 />
             )}
 
             {createDialogOpen && (
-                <CreateUserDialog
+                <CreateCategoryDialog
                     isOpen={createDialogOpen}
                     onClose={() => setCreateDialogOpen(false)}
                 />
             )}
 
             {deleteDialogOpen && (
-                <DeleteUserDialog
-                    user={selectedUser}
+                <DeleteCategoryDialog
+                    category={selectedCategory}
                     isOpen={deleteDialogOpen}
                     onClose={() => setDeleteDialogOpen(false)}
                     onConfirm={confirmDelete}
@@ -765,4 +671,3 @@ function UserTable({ users }: { users: any[] }) {
         </div>
     );
 }
-

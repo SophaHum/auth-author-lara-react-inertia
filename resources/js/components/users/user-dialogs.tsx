@@ -5,18 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { User } from '@/pages/users/index';
 
+// Type for roles
+interface Role {
+  id: number;
+  name: string;
+}
+
+// Get roles from page props
+function useRoles(): Role[] {
+  const { roles = [] } = usePage().props as { roles?: Role[] };
+  return roles;
+}
+
 // View User Dialog
-export function ViewUserDialog({ 
-  user, 
-  isOpen, 
-  onClose 
-}: { 
-  user: User | null, 
-  isOpen: boolean, 
-  onClose: () => void 
+export function ViewUserDialog({
+  user,
+  isOpen,
+  onClose
+}: {
+  user: User | null,
+  isOpen: boolean,
+  onClose: () => void
 }) {
   // Safe guard against null user
   if (!user || !isOpen) return null;
@@ -26,7 +38,6 @@ export function ViewUserDialog({
     id: user?.id || '',
     name: user?.name || 'Unknown User',
     email: user?.email || 'No email provided',
-    username: user?.username || '',
     role: user?.role || '',
     created_at: user?.created_at || '',
   };
@@ -67,12 +78,6 @@ export function ViewUserDialog({
             <Label className="text-right">Email</Label>
             <div className="col-span-3">{safeUser.email}</div>
           </div>
-          {safeUser.username && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Username</Label>
-              <div className="col-span-3">{safeUser.username}</div>
-            </div>
-          )}
           {safeUser.role && (
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Role</Label>
@@ -105,27 +110,26 @@ export function ViewUserDialog({
 }
 
 // Edit User Dialog
-export function EditUserDialog({ 
-  user, 
-  isOpen, 
-  onClose 
-}: { 
-  user: User | null, 
-  isOpen: boolean, 
-  onClose: () => void 
+export function EditUserDialog({
+  user,
+  isOpen,
+  onClose
+}: {
+  user: User | null,
+  isOpen: boolean,
+  onClose: () => void
 }) {
+  const roles = useRoles();
   const [formData, setFormData] = useState<{
     name: string;
     email: string;
-    username: string;
     role: string;
   }>({
     name: '',
     email: '',
-    username: '',
     role: '',
   });
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -134,7 +138,6 @@ export function EditUserDialog({
       setFormData({
         name: user.name || '',
         email: user.email || '',
-        username: user.username || '',
         role: user.role || '',
       });
     }
@@ -143,7 +146,7 @@ export function EditUserDialog({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error for this field when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
@@ -159,21 +162,21 @@ export function EditUserDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) return;
-    
+
     // Basic validation
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) newErrors.name = 'Name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
-    
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     router.put(`/users/${user.id}`, formData, {
       onSuccess: () => {
         onClose();
@@ -227,32 +230,25 @@ export function EditUserDialog({
               </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="username" className="text-right">Username</Label>
-              <div className="col-span-3">
-                <Input
-                  id="username"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  className={errors.username ? "border-red-500" : ""}
-                />
-                {errors.username && <p className="text-red-500 text-sm mt-1">{errors.username}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="role" className="text-right">Role</Label>
               <div className="col-span-3">
-                <Select 
-                  value={formData.role} 
+                <Select
+                  value={formData.role}
                   onValueChange={handleRoleChange}
                 >
                   <SelectTrigger className={errors.role ? "border-red-500" : ""}>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="editor">Editor</SelectItem>
+                    {roles.length > 0 ? (
+                      roles.map((role) => (
+                        <SelectItem key={role.id} value={role.name}>
+                          {role.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="">No roles available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
@@ -272,29 +268,29 @@ export function EditUserDialog({
 }
 
 // Create User Dialog
-export function CreateUserDialog({ 
-  isOpen, 
-  onClose 
-}: { 
-  isOpen: boolean, 
-  onClose: () => void 
+export function CreateUserDialog({
+  isOpen,
+  onClose
+}: {
+  isOpen: boolean,
+  onClose: () => void
 }) {
+  const roles = useRoles();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    username: '',
     role: '',
     password: '',
     password_confirmation: '',
   });
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error for this field when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
@@ -310,7 +306,7 @@ export function CreateUserDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       // Basic validation
       const newErrors: Record<string, string> = {};
@@ -320,14 +316,14 @@ export function CreateUserDialog({
       if (formData.password !== formData.password_confirmation) {
         newErrors.password_confirmation = 'Passwords do not match';
       }
-      
+
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
         return;
       }
-      
+
       setIsSubmitting(true);
-      
+
       router.post('/users', formData, {
         onSuccess: () => {
           try {
@@ -335,7 +331,6 @@ export function CreateUserDialog({
             setFormData({
               name: '',
               email: '',
-              username: '',
               role: '',
               password: '',
               password_confirmation: '',
@@ -401,32 +396,25 @@ export function CreateUserDialog({
               </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="username" className="text-right">Username</Label>
-              <div className="col-span-3">
-                <Input
-                  id="username"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  className={errors.username ? "border-red-500" : ""}
-                />
-                {errors.username && <p className="text-red-500 text-sm mt-1">{errors.username}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="role" className="text-right">Role</Label>
               <div className="col-span-3">
-                <Select 
-                  value={formData.role} 
+                <Select
+                  value={formData.role}
                   onValueChange={handleRoleChange}
                 >
                   <SelectTrigger className={errors.role ? "border-red-500" : ""}>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="editor">Editor</SelectItem>
+                    {roles.length > 0 ? (
+                      roles.map((role) => (
+                        <SelectItem key={role.id} value={role.name}>
+                          {role.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="">No roles available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
@@ -476,21 +464,20 @@ export function CreateUserDialog({
 }
 
 // Delete User Dialog
-export function DeleteUserDialog({ 
-  user, 
-  isOpen, 
+export function DeleteUserDialog({
+  user,
+  isOpen,
   onClose,
   onConfirm
-}: { 
-  user: User | null, 
-  isOpen: boolean, 
+}: {
+  user: User | null,
+  isOpen: boolean,
   onClose: () => void,
   onConfirm: () => void
 }) {
   if (!user || !isOpen) return null;
 
   // Safely get user properties with fallbacks
-  const userName = user?.name || 'Unknown User';
   const userEmail = user?.email || 'No email';
 
   // Create a safe wrapper for the confirmation handler
@@ -511,14 +498,14 @@ export function DeleteUserDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action will permanently delete the user <strong>{userName}</strong> with email <strong>{userEmail}</strong>.
+            This action will permanently delete the user with email <strong>{userEmail}</strong>.
             This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction 
-            className="bg-red-500 hover:bg-red-600" 
+          <AlertDialogAction
+            className="bg-red-500 hover:bg-red-600"
             onClick={handleConfirm}
           >
             Delete
