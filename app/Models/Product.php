@@ -13,7 +13,11 @@ class Product extends Model
         'name',
         'description',
         'price',
+        'stock',
+        'status',
+        'image',
         'category_id',
+        'user_id',
     ];
 
     /**
@@ -22,5 +26,13 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Get the user that created the product.
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

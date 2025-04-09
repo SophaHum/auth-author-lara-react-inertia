@@ -4,7 +4,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, usePage, router } from '@inertiajs/react';
 import {
     ColumnDef,
-    ColumnFiltersState,
     SortingState,
     VisibilityState,
     flexRender,
@@ -18,26 +17,21 @@ import {
     Eye,
     Pencil,
     Trash,
-    UserPlus,
+    PlusCircle,
     Search,
-    X,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-    SlidersHorizontal
+    SlidersHorizontal,
+    X,
+    UserCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import {
-  ViewUserDialog,
-  EditUserDialog,
-  CreateUserDialog,
-  DeleteUserDialog,
-} from '@/components/users/user-dialogs';
 import {
     Select,
     SelectContent,
@@ -56,93 +50,91 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ErrorBag, Errors } from '@inertiajs/core';
 
-type PageProps = {
-    users: any[];
-    errors: Errors & ErrorBag;
-    deferred?: Record<string, string[] | undefined>;
+// Import the necessary dialog components
+import {
+    ViewUserDialog,
+    EditUserDialog,
+    CreateUserDialog,
+    DeleteUserDialog,
+} from '@/components/users/user-dialogs'; // You'll need to create these
+
+// TypeScript interfaces
+export interface Role {
+    id: string;
+    name: string;
 }
 
-export type User = {
+export interface User {
     id: string;
     name: string;
     email: string;
-    role?: string;
+    roles: Role[];
     created_at?: string;
-    updated_at?: string;
-};
-
-// User component as default export
-export default function UserIndex() {
-    // Use a try-catch block for initial data processing
-    try {
-        const pageData = usePage().props as PageProps;
-        const users = Array.isArray(pageData.users) ? pageData.users : [];
-
-        const breadcrumbs: BreadcrumbItem[] = [
-            { title: 'Users', href: '/users' },
-        ];
-
-        // Simple error boundary
-        const [hasError, setHasError] = useState(false);
-
-        useEffect(() => {
-            // Reset error state when component mounts or users change
-            setHasError(false);
-        }, []);
-
-        if (hasError) {
-            return (
-                <AppLayout breadcrumbs={breadcrumbs}>
-                    <div>
-                        <div>Something went wrong. Please try refreshing the page.</div>
-                        <Button
-                            onClick={() => window.location.reload()}
-                            className="ml-4"
-                        >
-                            Refresh
-                        </Button>
-                    </div>
-                </AppLayout>
-            );
-        }
-
-        return (
-            <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Users" />
-                <div className="w-full">
-                    <UserTable users={users} />
-                </div>
-            </AppLayout>
-        );
-    } catch (error) {
-        console.error("Failed to render UserIndex:", error);
-        return (
-            <div className="p-4">
-                <h1 className="text-xl font-bold">Error Loading Users</h1>
-                <p className="my-2">There was a problem loading this page. Please try reloading.</p>
-                <button
-                    className="px-4 py-2 bg-blue-500 text-white rounded"
-                    onClick={() => window.location.reload()}
-                >
-                    Reload Page
-                </button>
-            </div>
-        );
-    }
 }
 
-// Simplified UserTable component
-function UserTable({ users }: { users: any[] }) {
+type PageProps = {
+    users: User[] | {
+        data: User[];
+        meta: {
+            current_page: number;
+            last_page: number;
+            per_page: number;
+            total: number;
+        }
+    };
+    roles: Role[];
+    errors: Errors & ErrorBag;
+}
+
+const breadcrumbs: BreadcrumbItem[] = [
+    {
+        title: 'Users',
+        href: '/users',
+    },
+];
+
+export default function Users() {
+    const pageData = usePage().props as PageProps;
+
+    // Add debugging to see what data is coming from the backend
+    console.log('Users page data:', pageData);
+
+    const users = Array.isArray(pageData.users) ? pageData.users : Array.isArray(pageData.users?.data) ? pageData.users.data : [];
+    const roles = pageData.roles || [];
+    const pagination = (Array.isArray(pageData.users) ? null : pageData.users) || { current_page: 1, last_page: 1, per_page: 10, total: 0 };
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title="Users" />
+            <div className="w-full">
+                <UsersTable users={users} roles={roles} pagination={'meta' in pagination ? pagination.meta : pagination} />
+            </div>
+        </AppLayout>
+    );
+}
+
+function UsersTable({
+    users,
+    roles,
+    pagination
+}: {
+    users: User[],
+    roles: Role[],
+    pagination: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+    }
+}) {
     const [sorting, setSorting] = useState<SortingState>([]);
-    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = useState({});
     const [searchFilter, setSearchFilter] = useState("");
     const [roleFilter, setRoleFilter] = useState<string | null>(null);
-    const [pageSize, setPageSize] = useState(10);
-    const [currentPage, setCurrentPage] = useState(0);
+    const [currentPage, setCurrentPage] = useState(pagination.current_page - 1);
+    const [pageSize, setPageSize] = useState(pagination.per_page);
     const [filtersExpanded, setFiltersExpanded] = useState(false);
-    const [dateFilter, setDateFilter] = useState<{start?: string, end?: string}>({});
 
     // Dialog states
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -151,31 +143,21 @@ function UserTable({ users }: { users: any[] }) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-    // Simple table without complex features
+    // Table data state
     const [tableData, setTableData] = useState<User[]>([]);
     const [filteredData, setFilteredData] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Extract unique roles for filter dropdown
-    const availableRoles = React.useMemo(() => {
-        const roles = new Set<string>();
-        tableData.forEach(user => {
-            if (user.role) roles.add(user.role);
-        });
-        return Array.from(roles);
-    }, [tableData]);
-
-    // Safely process user data on mount only
+    // Process initial data
     useEffect(() => {
         try {
             setIsLoading(true);
             const processedData = (users || []).map(user => ({
-                id: String(user?.id || ''),
-                name: String(user?.name || ''),
-                email: String(user?.email || ''),
-                role: String(user?.role || ''),
-                created_at: String(user?.created_at || ''),
-                updated_at: String(user?.updated_at || '')
+                ...user,
+                id: String(user.id || ''),
+                name: String(user.name || ''),
+                email: String(user.email || ''),
+                roles: user.roles || [],
             }));
             setTableData(processedData);
             setFilteredData(processedData);
@@ -203,35 +185,19 @@ function UserTable({ users }: { users: any[] }) {
 
         // Role filter
         if (roleFilter) {
-            result = result.filter(user => user.role === roleFilter);
-        }
-
-        // Date range filter
-        if (dateFilter.start) {
-            result = result.filter(user => {
-                if (!user.created_at) return false;
-                const createdDate = new Date(user.created_at);
-                return createdDate >= new Date(dateFilter.start!);
-            });
-        }
-
-        if (dateFilter.end) {
-            result = result.filter(user => {
-                if (!user.created_at) return false;
-                const createdDate = new Date(user.created_at);
-                return createdDate <= new Date(dateFilter.end!);
-            });
+            result = result.filter(user =>
+                user.roles.some(role => role.id === roleFilter)
+            );
         }
 
         setFilteredData(result);
-    }, [tableData, searchFilter, roleFilter, dateFilter]);
+    }, [tableData, searchFilter, roleFilter]);
 
     // Reset to first page when filters change
     useEffect(() => {
         setCurrentPage(0);
     }, [filteredData]);
 
-    // Simplified columns without complex interactivity
     const columns: ColumnDef<User>[] = [
         {
             accessorKey: 'id',
@@ -273,25 +239,23 @@ function UserTable({ users }: { users: any[] }) {
             cell: ({ row }) => <div>{row.getValue('email')}</div>,
         },
         {
-            accessorKey: 'role',
-            header: ({ column }) => (
-                <Button
-                    variant="ghost"
-                    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                >
-                    Role
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-            ),
+            accessorKey: 'roles',
+            header: 'Roles',
             cell: ({ row }) => {
-                const role = row.getValue('role') as string;
-                if (!role) return <Badge variant="outline">No Role</Badge>;
-
-                // Style the Admin role differently
-                if (role === 'Admin') {
-                    return <Badge variant="destructive">{role}</Badge>;
-                }
-                return <Badge variant="outline">{role}</Badge>;
+                const user = row.original;
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        {user.roles && user.roles.length > 0 ? (
+                            user.roles.map((role) => (
+                                <Badge key={role.id} variant="outline">
+                                    {role.name}
+                                </Badge>
+                            ))
+                        ) : (
+                            <span className="text-muted-foreground text-sm">No roles</span>
+                        )}
+                    </div>
+                );
             },
         },
         {
@@ -359,7 +323,6 @@ function UserTable({ users }: { users: any[] }) {
         },
     ];
 
-    // Enhanced table configuration
     const table = useReactTable({
         data: filteredData,
         columns,
@@ -385,7 +348,11 @@ function UserTable({ users }: { users: any[] }) {
     const resetFilters = () => {
         setSearchFilter("");
         setRoleFilter(null);
-        setDateFilter({});
+    };
+
+    // Toggle filters visibility
+    const toggleFilters = () => {
+        setFiltersExpanded(prev => !prev);
     };
 
     // Calculate pagination info
@@ -455,12 +422,6 @@ function UserTable({ users }: { users: any[] }) {
         }
     };
 
-    // Add this function to explicitly toggle filter visibility
-    const toggleFilters = () => {
-        setFiltersExpanded(prev => !prev);
-    };
-
-    // In case of table error, show a simplified interface
     if (tableData.length === 0 && !isLoading) {
         return (
             <div className="p-4 border rounded">
@@ -479,16 +440,16 @@ function UserTable({ users }: { users: any[] }) {
                     <div className="flex justify-between items-center">
                         <CardTitle>Users</CardTitle>
                         <Button onClick={() => setCreateDialogOpen(true)} className="gap-1">
-                            <UserPlus className="h-4 w-4" />
+                            <PlusCircle className="h-4 w-4" />
                             <span>Add User</span>
                         </Button>
                     </div>
                     <CardDescription>
-                        {/* Manage your users. You can view, add, edit, or delete users. */}
+                        Manage users and assign roles.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Revised Filter Section with dark mode support */}
+                    {/* Filter Section */}
                     <div className="mb-4">
                         <div className="flex justify-between items-center mb-3">
                             <div className="flex items-center space-x-2">
@@ -510,7 +471,7 @@ function UserTable({ users }: { users: any[] }) {
                                     <SlidersHorizontal className="h-4 w-4" />
                                     {filtersExpanded ? 'Hide Filters' : 'Show Filters'}
                                 </Button>
-                                {(searchFilter || roleFilter || dateFilter.start || dateFilter.end) && (
+                                {(searchFilter || roleFilter) && (
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -524,10 +485,10 @@ function UserTable({ users }: { users: any[] }) {
                             </div>
                         </div>
 
-                        {/* Filter content with dark mode support */}
+                        {/* Filter content */}
                         {filtersExpanded && (
                             <div className="space-y-4 bg-muted/50 dark:bg-muted/20 p-4 rounded-md mt-3 animate-in fade-in-50 duration-200 border border-border">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium text-foreground">Role</label>
                                         <Select
@@ -539,41 +500,21 @@ function UserTable({ users }: { users: any[] }) {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="all">All Roles</SelectItem>
-                                                {availableRoles.map((role) => (
-                                                    <SelectItem key={role} value={role}>
-                                                        {role}
+                                                {roles.map((role) => (
+                                                    <SelectItem key={role.id} value={role.id}>
+                                                        {role.name}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground">Date From</label>
-                                        <Input
-                                            type="date"
-                                            value={dateFilter.start || ''}
-                                            onChange={(e) => setDateFilter({...dateFilter, start: e.target.value})}
-                                            className="bg-background"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-foreground">Date To</label>
-                                        <Input
-                                            type="date"
-                                            value={dateFilter.end || ''}
-                                            onChange={(e) => setDateFilter({...dateFilter, end: e.target.value})}
-                                            className="bg-background"
-                                        />
                                     </div>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Active Filters with dark mode support */}
-                    {(searchFilter || roleFilter || dateFilter.start || dateFilter.end) && (
+                    {/* Active Filters */}
+                    {(searchFilter || roleFilter) && (
                         <div className="flex flex-wrap gap-2 mb-4">
                             {searchFilter && (
                                 <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
@@ -586,28 +527,10 @@ function UserTable({ users }: { users: any[] }) {
                             )}
                             {roleFilter && (
                                 <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
-                                    Role: {roleFilter}
+                                    Role: {roles.find(r => r.id === roleFilter)?.name}
                                     <X
                                         className="h-3 w-3 cursor-pointer text-foreground/70 hover:text-foreground"
                                         onClick={() => setRoleFilter(null)}
-                                    />
-                                </Badge>
-                            )}
-                            {dateFilter.start && (
-                                <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
-                                    From: {dateFilter.start}
-                                    <X
-                                        className="h-3 w-3 cursor-pointer text-foreground/70 hover:text-foreground"
-                                        onClick={() => setDateFilter({...dateFilter, start: undefined})}
-                                    />
-                                </Badge>
-                            )}
-                            {dateFilter.end && (
-                                <Badge variant="secondary" className="gap-1 text-foreground bg-muted hover:bg-muted/80">
-                                    To: {dateFilter.end}
-                                    <X
-                                        className="h-3 w-3 cursor-pointer text-foreground/70 hover:text-foreground"
-                                        onClick={() => setDateFilter({...dateFilter, end: undefined})}
                                     />
                                 </Badge>
                             )}
@@ -685,7 +608,6 @@ function UserTable({ users }: { users: any[] }) {
                                 <SelectItem value="10">10 / page</SelectItem>
                                 <SelectItem value="25">25 / page</SelectItem>
                                 <SelectItem value="50">50 / page</SelectItem>
-                                <SelectItem value="100">100 / page</SelectItem>
                             </SelectContent>
                         </Select>
 
@@ -730,8 +652,8 @@ function UserTable({ users }: { users: any[] }) {
                 </CardFooter>
             </Card>
 
-            {/* Dialogs without error boundaries */}
-            {viewDialogOpen && (
+            {/* Dialogs - you'll need to create these components */}
+            {viewDialogOpen && selectedUser && (
                 <ViewUserDialog
                     user={selectedUser}
                     isOpen={viewDialogOpen}
@@ -739,9 +661,10 @@ function UserTable({ users }: { users: any[] }) {
                 />
             )}
 
-            {editDialogOpen && (
+            {editDialogOpen && selectedUser && (
                 <EditUserDialog
                     user={selectedUser}
+                    roles={roles}
                     isOpen={editDialogOpen}
                     onClose={() => setEditDialogOpen(false)}
                 />
@@ -749,12 +672,13 @@ function UserTable({ users }: { users: any[] }) {
 
             {createDialogOpen && (
                 <CreateUserDialog
+                    roles={roles}
                     isOpen={createDialogOpen}
                     onClose={() => setCreateDialogOpen(false)}
                 />
             )}
 
-            {deleteDialogOpen && (
+            {deleteDialogOpen && selectedUser && (
                 <DeleteUserDialog
                     user={selectedUser}
                     isOpen={deleteDialogOpen}

@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Category;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class ProductController extends Controller
 {
@@ -25,10 +26,14 @@ class ProductController extends Controller
                             'name' => $product->name,
                             'description' => $product->description,
                             'price' => $product->price,
+                            'stock' => $product->stock,
+                            'status' => $product->status,
+                            'image' => $product->image,
                             'category' => $product->category ? [
                                 'id' => $product->category->id,
                                 'name' => $product->category->name,
                             ] : null,
+                            'user_id' => $product->user_id,
                             'created_at' => $product->created_at ? $product->created_at->format('Y-m-d H:i:s') : null,
                             'updated_at' => $product->updated_at ? $product->updated_at->format('Y-m-d H:i:s') : null,
                         ];
@@ -53,14 +58,24 @@ class ProductController extends Controller
                 'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
                 'price' => 'required|numeric|min:0',
+                'stock' => 'nullable|integer|min:0',
+                'status' => 'nullable|string|in:active,inactive,out_of_stock',
+                'image' => 'nullable|string',
                 'category_id' => 'nullable|exists:categories,id',
+                'user_id' => 'nullable|exists:users,id',
             ]);
+
+            $userId = $request->input('user_id') ?? Auth::id();
 
             Product::create([
                 'name' => $request->input('name'),
-                'description' => $request->input('description'),
+                'description' => $request->input('description') ?? '', // Ensure description is never null
                 'price' => $request->input('price'),
+                'stock' => $request->input('stock', 0),
+                'status' => $request->input('status', 'active'),
+                'image' => $request->input('image') ?? '', // Ensure image is never null if required
                 'category_id' => $request->input('category_id'),
+                'user_id' => $userId,
             ]);
 
             return redirect()->route('products.index')
@@ -69,7 +84,7 @@ class ProductController extends Controller
         } catch (\Exception $e) {
             Log::error('Error creating product: ' . $e->getMessage());
             return redirect()->back()
-                ->with('error', 'Failed to create product')
+                ->with('error', 'Failed to create product: ' . $e->getMessage())
                 ->withErrors(['name' => $e->getMessage()])
                 ->withInput();
         }
@@ -88,10 +103,14 @@ class ProductController extends Controller
                 'name' => $product->name,
                 'description' => $product->description,
                 'price' => $product->price,
+                'stock' => $product->stock,
+                'status' => $product->status,
+                'image' => $product->image,
                 'category' => $product->category ? [
                     'id' => $product->category->id,
                     'name' => $product->category->name,
                 ] : null,
+                'user_id' => $product->user_id,
                 'created_at' => $product->created_at ? $product->created_at->format('Y-m-d H:i:s') : null,
                 'updated_at' => $product->updated_at ? $product->updated_at->format('Y-m-d H:i:s') : null,
             ];
@@ -114,15 +133,25 @@ class ProductController extends Controller
                 'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
                 'price' => 'required|numeric|min:0',
+                'stock' => 'nullable|integer|min:0',
+                'status' => 'nullable|string|in:active,inactive,out_of_stock',
+                'image' => 'nullable|string',
                 'category_id' => 'nullable|exists:categories,id',
+                'user_id' => 'nullable|exists:users,id',
             ]);
+
+            $userId = $request->input('user_id') ?? Auth::id();
 
             $product = Product::findOrFail($id);
             $product->update([
                 'name' => $request->input('name'),
-                'description' => $request->input('description'),
+                'description' => $request->input('description') ?? '', // Ensure description is never null
                 'price' => $request->input('price'),
+                'stock' => $request->input('stock', 0),
+                'status' => $request->input('status', 'active'),
+                'image' => $request->input('image') ?? '', // Ensure image is never null if required
                 'category_id' => $request->input('category_id'),
+                'user_id' => $userId,
             ]);
 
             return redirect()->back()->with('success', 'Product updated successfully');
@@ -146,12 +175,12 @@ class ProductController extends Controller
             $product = Product::findOrFail($id);
             $product->delete();
             DB::commit();
-            return response()->json(['success' => 'Product deleted successfully']);
 
+            return redirect()->back()->with('success', 'Product deleted successfully');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error deleting product: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to delete product'], 500);
+            return redirect()->back()->with('error', 'Failed to delete product');
         }
     }
 }

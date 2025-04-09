@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Models\Category;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class CategoryController extends Controller
 {
@@ -16,19 +16,19 @@ class CategoryController extends Controller
     public function index()
     {
         $categories = Category::orderBy('id', 'desc')
-                    ->paginate(10)
-                    ->through(function($category) {
-                        return [
-                            'id' => $category->id,
-                            'name' => $category->name,
-                            'description' => $category->description,
-                            'created_at' => $category->created_at ? $category->created_at->format('Y-m-d H:i:s') : null,
-                            'updated_at' => $category->updated_at ? $category->updated_at->format('Y-m-d H:i:s') : null,
-                        ];
-                    });
+            ->paginate(10)
+            ->through(function($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'description' => $category->description,
+                    'created_at' => $category->created_at ? $category->created_at->format('Y-m-d H:i:s') : null,
+                    'updated_at' => $category->updated_at ? $category->updated_at->format('Y-m-d H:i:s') : null,
+                ];
+            });
 
         return Inertia::render('categories/index', [
-            'categories' => $categories,
+            'categories' => $categories
         ]);
     }
 
@@ -39,7 +39,7 @@ class CategoryController extends Controller
     {
         try {
             $request->validate([
-                'name' => 'required|string|max:255|unique:categories,name',
+                'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
             ]);
 
@@ -50,7 +50,6 @@ class CategoryController extends Controller
 
             return redirect()->route('categories.index')
                 ->with('success', 'Category created successfully');
-
         } catch (\Exception $e) {
             Log::error('Error creating category: ' . $e->getMessage());
             return redirect()->back()
@@ -77,7 +76,6 @@ class CategoryController extends Controller
             ];
 
             return response()->json(['category' => $categoryData]);
-
         } catch (\Exception $e) {
             Log::error('Error showing category: ' . $e->getMessage());
             return response()->json(['error' => 'Category not found'], 404);
@@ -91,7 +89,7 @@ class CategoryController extends Controller
     {
         try {
             $request->validate([
-                'name' => 'required|string|max:255|unique:categories,name,'.$id,
+                'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
             ]);
 
@@ -102,7 +100,6 @@ class CategoryController extends Controller
             ]);
 
             return redirect()->back()->with('success', 'Category updated successfully');
-
         } catch (\Exception $e) {
             Log::error('Error updating category: ' . $e->getMessage());
             return redirect()->back()
@@ -120,20 +117,14 @@ class CategoryController extends Controller
         try {
             DB::beginTransaction();
             $category = Category::findOrFail($id);
-
-            // Check if category has associated products
-            if ($category->products()->count() > 0) {
-                return response()->json(['error' => 'Cannot delete category with associated products'], 403);
-            }
-
             $category->delete();
             DB::commit();
-            return response()->json(['success' => 'Category deleted successfully']);
 
+            return redirect()->back()->with('success', 'Category deleted successfully');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error deleting category: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to delete category'], 500);
+            return redirect()->back()->with('error', 'Failed to delete category');
         }
     }
 }

@@ -2,185 +2,209 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    public function __construct()
+    {
+        // $this->middleware('permission:user-list|user-create|user-edit|user-delete', ['only' => ['index','store']]);
+        // $this->middleware('permission:user-create', ['only' => ['create','store']]);
+        // $this->middleware('permission:user-edit', ['only' => ['edit','update']]);
+        // $this->middleware('permission:user-delete', ['only' => ['destroy']]);
+    }
+
     /**
-     * Display a listing of the resource.
+     * Display a listing of users with their roles.
      */
     public function index()
     {
-        try {
-            // Get users with extra error handling and simplify data structure
-            $users = User::with('roles')
-                          ->orderBy('id', 'desc')
-                          ->limit(100) // Limit to prevent large data loads
-                          ->get()
-                          ->map(function($user) {
-                              // Ensure serializable data without circular references
-                              return [
-                                  'id' => $user->id,
-                                  'name' => $user->name,
-                                  'email' => $user->email,
-                                  'role' => $user->getRoleNames()->first(), // Get the first role name
-                                  'created_at' => $user->created_at->format('Y-m-d H:i:s'),
-                                  'updated_at' => $user->updated_at->format('Y-m-d H:i:s'),
-                              ];
-                          })
-                          ->toArray();
+        $users = User::with('roles')
+                    ->orderBy('id', 'desc')
+                    ->paginate(10)
+                    ->through(function($user) {
+                        return [
+                            'id' => $user->id,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'roles' => $user->roles->map(function($role) {
+                                return [
+                                    'id' => $role->id,
+                                    'name' => $role->name,
+                                ];
+                            })->toArray(),
+                            'created_at' => $user->created_at ? $user->created_at->format('Y-m-d H:i:s') : null,
+                        ];
+                    });
 
-            // Get all roles for the dropdown
-            $roles = Role::select('id', 'name')->orderBy('name')->get();
+        // Get all roles for user creation/editing
+        $roles = Role::all(['id', 'name'])->toArray();
 
-            return Inertia::render('users/index', [
-                'users' => $users,
-                'roles' => $roles,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error fetching users: ' . $e->getMessage());
-
-            // Return with empty users array and clear error message
-            return Inertia::render('users/index', [
-                'users' => [],
-                'roles' => [],
-                'error' => 'Failed to load users. Please try again.'
-            ]);
-        }
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        $roles = Role::select('id', 'name')->orderBy('name')->get();
-
-        return Inertia::render('users/create', [
-            'roles' => $roles,
+        return Inertia::render('users/index', [
+            'users' => $users,
+            'roles' => $roles
         ]);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Store a newly created user.
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'role' => 'nullable|string|exists:roles,name',
-            'password' => 'required|string|min:8|confirmed',
-        ]);
+        try {
+            $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|unique:users,email',
+                'password' => 'required|min:8',
+                'roles' => 'nullable|array',
+            ]);
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-        ]);
+            DB::beginTransaction();
 
-        // Assign role if provided
-        if (!empty($validated['role'])) {
-            $user->assignRole($validated['role']);
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+            ]);
+
+            if ($request->has('roles') && !empty($request->roles)) {
+                $user->syncRoles($request->roles);
+            }
+
+            DB::commit();
+
+            return redirect()->route('users.index')
+                ->with('success', 'User created successfully');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error creating user: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Failed to create user')
+                ->withErrors(['email' => $e->getMessage()])
+                ->withInput();
         }
-
-        return redirect()->route('users.index')->with('success', 'User created successfully');
     }
 
     /**
-     * Display the specified resource.
+     * Display the specified user.
      */
     public function show(string $id)
     {
         try {
-            $user = User::findOrFail($id);
-            return Inertia::render('users/show', [
-                'user' => $user
-            ]);
+            $user = User::with(['roles', 'roles.permissions'])->findOrFail($id);
+
+            $userData = [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'roles' => $user->roles->map(function($role) {
+                    return [
+                        'id' => $role->id,
+                        'name' => $role->name,
+                        'permissions' => $role->permissions->map(function($permission) {
+                            return [
+                                'id' => $permission->id,
+                                'name' => $permission->name,
+                            ];
+                        })->toArray(),
+                    ];
+                })->toArray(),
+                'permissions' => $user->getAllPermissions()->map(function($permission) {
+                    return [
+                        'id' => $permission->id,
+                        'name' => $permission->name,
+                    ];
+                })->toArray(),
+                'created_at' => $user->created_at ? $user->created_at->format('Y-m-d H:i:s') : null,
+            ];
+
+            return response()->json(['user' => $userData]);
+
         } catch (\Exception $e) {
-            return redirect()->route('users.index')->with('error', 'User not found');
+            Log::error('Error showing user: ' . $e->getMessage());
+            return response()->json(['error' => 'User not found'], 404);
         }
     }
 
     /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        try {
-            $user = User::with('roles')->findOrFail($id);
-            $roles = Role::select('id', 'name')->orderBy('name')->get();
-
-            return Inertia::render('users/edit', [
-                'user' => array_merge($user->toArray(), [
-                    'role' => $user->getRoleNames()->first(),
-                ]),
-                'roles' => $roles,
-            ]);
-        } catch (\Exception $e) {
-            return redirect()->route('users.index')->with('error', 'User not found');
-        }
-    }
-
-    /**
-     * Update the specified resource in storage.
+     * Update the specified user.
      */
     public function update(Request $request, string $id)
     {
-        $user = User::findOrFail($id);
+        try {
+            $user = User::findOrFail($id);
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => [
-                'required',
-                'string',
-                'email',
-                'max:255',
-                Rule::unique('users')->ignore($user->id),
-            ],
-            'role' => 'nullable|string|exists:roles,name',
-            'password' => 'nullable|string|min:8|confirmed',
-        ]);
+            $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|unique:users,email,'.$id,
+                'password' => 'nullable|min:8',
+                'roles' => 'nullable|array',
+            ]);
 
-        $updateData = [
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-        ];
+            DB::beginTransaction();
 
-        // Only update password if it's provided
-        if (!empty($validated['password'])) {
-            $updateData['password'] = Hash::make($validated['password']);
+            $user->name = $request->name;
+            $user->email = $request->email;
+
+            if ($request->filled('password')) {
+                $user->password = Hash::make($request->password);
+            }
+
+            $user->save();
+
+            if ($request->has('roles') && !empty($request->roles)) {
+                $user->syncRoles($request->roles);
+            } else {
+                $user->syncRoles([]);
+            }
+
+            DB::commit();
+
+            return redirect()->back()->with('success', 'User updated successfully');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error updating user: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Failed to update user')
+                ->withErrors(['email' => $e->getMessage()])
+                ->withInput();
         }
-
-        $user->update($updateData);
-
-        // Sync roles if provided
-        if (isset($validated['role'])) {
-            $user->syncRoles([$validated['role']]);
-        }
-
-        return redirect()->back()->with('success', 'User updated successfully');
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Remove the specified user.
      */
     public function destroy(string $id)
     {
         try {
+            DB::beginTransaction();
+
             $user = User::findOrFail($id);
+
+            // Prevent deletion of admin user (assuming admin has ID 1)
+            if ($user->id === 1) {
+                return response()->json(['error' => 'Cannot delete admin user'], 403);
+            }
+
+            // Remove role associations first
+            $user->syncRoles([]);
             $user->delete();
 
-            return redirect()->route('users.index')->with('success', 'User deleted successfully');
+            DB::commit();
+            return response()->json(['success' => 'User deleted successfully']);
+
         } catch (\Exception $e) {
-            return redirect()->route('users.index')->with('error', 'Failed to delete user');
+            DB::rollBack();
+            Log::error('Error deleting user: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to delete user'], 500);
         }
     }
 }

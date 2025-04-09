@@ -1,517 +1,538 @@
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { router, usePage } from '@inertiajs/react';
-import { User } from '@/pages/users/index';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
+import { router } from '@inertiajs/react';
+import { User, Role } from '@/pages/users/index';
 
-// Type for roles
-interface Role {
-  id: number;
-  name: string;
-}
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
-// Get roles from page props
-function useRoles(): Role[] {
-  const { roles = [] } = usePage().props as { roles?: Role[] };
-  return roles;
-}
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from '@/components/ui/form';
+
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+
+// Form validation schema for user creation
+const createUserSchema = z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters'),
+    email: z.string().email('Please enter a valid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    role: z.string().optional(),
+});
+
+type CreateUserFormValues = z.infer<typeof createUserSchema>;
+
+// Form validation schema for user editing
+const editUserSchema = z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters'),
+    email: z.string().email('Please enter a valid email address'),
+    password: z.string().optional(),
+    role: z.string().optional(),
+});
+
+type EditUserFormValues = z.infer<typeof editUserSchema>;
 
 // View User Dialog
 export function ViewUserDialog({
-  user,
-  isOpen,
-  onClose
+    user,
+    isOpen,
+    onClose
 }: {
-  user: User | null,
-  isOpen: boolean,
-  onClose: () => void
+    user: User,
+    isOpen: boolean,
+    onClose: () => void
 }) {
-  // Safe guard against null user
-  if (!user || !isOpen) return null;
+    const [userData, setUserData] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  // Safely accessing properties with fallbacks
-  const safeUser = {
-    id: user?.id || '',
-    name: user?.name || 'Unknown User',
-    email: user?.email || 'No email provided',
-    role: user?.role || '',
-    created_at: user?.created_at || '',
-  };
+    useEffect(() => {
+        if (isOpen && user) {
+            setLoading(true);
+            fetch(`/users/${user.id}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load user details');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    setUserData(data.user);
+                    setLoading(false);
+                })
+                .catch(err => {
+                    console.error('Error fetching user:', err);
+                    setError(err.message);
+                    setLoading(false);
+                });
+        }
+    }, [isOpen, user]);
 
-  // Safe handler to prevent crashes
-  const handleEditClick = () => {
-    try {
-      onClose();
-      if (safeUser.id) {
-        router.visit(`/users/${safeUser.id}/edit`);
-      }
-    } catch (error) {
-      console.error("Error navigating to edit page:", error);
-    }
-  };
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>View User</DialogTitle>
+                    <DialogDescription>
+                        User information and assigned roles.
+                    </DialogDescription>
+                </DialogHeader>
 
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) onClose();
-    }}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>User Details</DialogTitle>
-          <DialogDescription>
-            Viewing information for {safeUser.name}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">ID</Label>
-            <div className="col-span-3">{safeUser.id}</div>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Name</Label>
-            <div className="col-span-3">{safeUser.name}</div>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Email</Label>
-            <div className="col-span-3">{safeUser.email}</div>
-          </div>
-          {safeUser.role && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Role</Label>
-              <div className="col-span-3">{safeUser.role}</div>
-            </div>
-          )}
-          {safeUser.created_at && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Created</Label>
-              <div className="col-span-3">
-                {/* Safely parse date with error handling */}
-                {(() => {
-                  try {
-                    return new Date(safeUser.created_at).toLocaleString();
-                  } catch (e) {
-                    return 'Invalid date';
-                  }
-                })()}
-              </div>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button type="button" onClick={onClose}>Close</Button>
-          <Button variant="outline" onClick={handleEditClick}>Edit</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+                {loading ? (
+                    <div className="flex justify-center items-center h-40">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                            <p className="mt-2">Loading user details...</p>
+                        </div>
+                    </div>
+                ) : error ? (
+                    <div className="text-red-500 text-center py-4">
+                        {error}
+                    </div>
+                ) : userData ? (
+                    <ScrollArea className="max-h-[70vh]">
+                        <div className="space-y-6 px-1 py-2">
+                            <div className="space-y-1">
+                                <h4 className="text-sm font-medium text-foreground">Name</h4>
+                                <p className="text-sm text-muted-foreground">{userData.name}</p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <h4 className="text-sm font-medium text-foreground">Email</h4>
+                                <p className="text-sm text-muted-foreground">{userData.email}</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h4 className="text-sm font-medium text-foreground">Roles</h4>
+                                {userData.roles && userData.roles.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {userData.roles.map(role => (
+                                            <Badge key={role.id} variant="outline">
+                                                {role.name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No roles assigned</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-1">
+                                <h4 className="text-sm font-medium text-foreground">Created At</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    {userData.created_at ? new Date(userData.created_at).toLocaleString() : 'N/A'}
+                                </p>
+                            </div>
+                        </div>
+                    </ScrollArea>
+                ) : (
+                    <div className="text-muted-foreground text-center py-4">
+                        User data not available
+                    </div>
+                )}
+
+                <DialogFooter>
+                    <Button onClick={onClose}>Close</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 // Edit User Dialog
 export function EditUserDialog({
-  user,
-  isOpen,
-  onClose
+    user,
+    roles,
+    isOpen,
+    onClose
 }: {
-  user: User | null,
-  isOpen: boolean,
-  onClose: () => void
+    user: User,
+    roles: Role[],
+    isOpen: boolean,
+    onClose: () => void
 }) {
-  const roles = useRoles();
-  const [formData, setFormData] = useState<{
-    name: string;
-    email: string;
-    role: string;
-  }>({
-    name: '',
-    email: '',
-    role: '',
-  });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        role: user.role || '',
-      });
-    }
-  }, [user]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-
-    // Clear error for this field when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleRoleChange = (value: string) => {
-    setFormData(prev => ({ ...prev, role: value }));
-    if (errors.role) {
-      setErrors(prev => ({ ...prev, role: '' }));
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!user) return;
-
-    // Basic validation
-    const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = 'Name is required';
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    router.put(`/users/${user.id}`, formData, {
-      onSuccess: () => {
-        onClose();
-        setIsSubmitting(false);
-      },
-      onError: (errors) => {
-        setErrors(errors as Record<string, string>);
-        setIsSubmitting(false);
-      }
+    const form = useForm<EditUserFormValues>({
+        resolver: zodResolver(editUserSchema),
+        defaultValues: {
+            name: user.name,
+            email: user.email,
+            password: '',
+            role: user.roles.length > 0 ? user.roles[0].id : undefined,
+        },
     });
-  };
 
-  if (!user) return null;
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Edit User</DialogTitle>
-          <DialogDescription>
-            Make changes to {user.name}'s profile here
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">Name</Label>
-              <div className="col-span-3">
-                <Input
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={errors.name ? "border-red-500" : ""}
-                />
-                {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">Email</Label>
-              <div className="col-span-3">
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={errors.email ? "border-red-500" : ""}
-                />
-                {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="role" className="text-right">Role</Label>
-              <div className="col-span-3">
-                <Select
-                  value={formData.role}
-                  onValueChange={handleRoleChange}
-                >
-                  <SelectTrigger className={errors.role ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.length > 0 ? (
-                      roles.map((role) => (
-                        <SelectItem key={role.id} value={role.name}>
-                          {role.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="">No roles available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save changes'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+    function onSubmit(data: EditUserFormValues) {
+        setIsSubmitting(true);
+
+        // Map form data to the expected format for the API
+        const formData = {
+            name: data.name,
+            email: data.email,
+            roles: [data.role], // Send the role as an array
+            ...(data.password ? { password: data.password } : {}),
+        };
+
+        router.put(`/users/${user.id}`, formData, {
+            onSuccess: () => {
+                form.reset();
+                onClose();
+                setIsSubmitting(false);
+            },
+            onError: (errors) => {
+                console.error('Update errors:', errors);
+                setIsSubmitting(false);
+                Object.keys(errors).forEach(key => {
+                    form.setError(key as keyof EditUserFormValues, {
+                        type: 'manual',
+                        message: errors[key] as string
+                    });
+                });
+            }
+        });
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Edit User</DialogTitle>
+                    <DialogDescription>
+                        Update user information and roles.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Name</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Full name" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="email"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Email</FormLabel>
+                                    <FormControl>
+                                        <Input type="email" placeholder="Email address" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="password"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Password (Leave blank to keep current)</FormLabel>
+                                    <FormControl>
+                                        <Input type="password" placeholder="New password" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="role"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Role</FormLabel>
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value}
+                                    >
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a role" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {roles.map(role => (
+                                                <SelectItem key={role.id} value={role.id}>
+                                                    {role.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting ? 'Updating...' : 'Update User'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
-// Create User Dialog
+// Create User Dialog - with empty form and dropdown for role selection
 export function CreateUserDialog({
-  isOpen,
-  onClose
+    roles,
+    isOpen,
+    onClose
 }: {
-  isOpen: boolean,
-  onClose: () => void
+    roles: Role[],
+    isOpen: boolean,
+    onClose: () => void
 }) {
-  const roles = useRoles();
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    role: '',
-    password: '',
-    password_confirmation: '',
-  });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-
-    // Clear error for this field when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleRoleChange = (value: string) => {
-    setFormData(prev => ({ ...prev, role: value }));
-    if (errors.role) {
-      setErrors(prev => ({ ...prev, role: '' }));
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      // Basic validation
-      const newErrors: Record<string, string> = {};
-      if (!formData.name.trim()) newErrors.name = 'Name is required';
-      if (!formData.email.trim()) newErrors.email = 'Email is required';
-      if (!formData.password) newErrors.password = 'Password is required';
-      if (formData.password !== formData.password_confirmation) {
-        newErrors.password_confirmation = 'Passwords do not match';
-      }
-
-      if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
-      }
-
-      setIsSubmitting(true);
-
-      router.post('/users', formData, {
-        onSuccess: () => {
-          try {
-            onClose();
-            setFormData({
-              name: '',
-              email: '',
-              role: '',
-              password: '',
-              password_confirmation: '',
-            });
-          } catch (error) {
-            console.error("Error resetting form:", error);
-          } finally {
-            setIsSubmitting(false);
-          }
+    const form = useForm<CreateUserFormValues>({
+        resolver: zodResolver(createUserSchema),
+        defaultValues: {
+            name: '',
+            email: '',
+            password: '',
+            role: undefined,
         },
-        onError: (errors) => {
-          try {
-            setErrors(errors as Record<string, string>);
-          } catch (error) {
-            console.error("Error setting form errors:", error);
-          } finally {
-            setIsSubmitting(false);
-          }
-        }
-      });
-    } catch (error) {
-      console.error("Form submission error:", error);
-      setIsSubmitting(false);
-    }
-  };
+    });
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Create New User</DialogTitle>
-          <DialogDescription>
-            Add a new user to the system
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">Name</Label>
-              <div className="col-span-3">
-                <Input
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={errors.name ? "border-red-500" : ""}
-                />
-                {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">Email</Label>
-              <div className="col-span-3">
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={errors.email ? "border-red-500" : ""}
-                />
-                {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="role" className="text-right">Role</Label>
-              <div className="col-span-3">
-                <Select
-                  value={formData.role}
-                  onValueChange={handleRoleChange}
-                >
-                  <SelectTrigger className={errors.role ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.length > 0 ? (
-                      roles.map((role) => (
-                        <SelectItem key={role.id} value={role.name}>
-                          {role.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="">No roles available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="password" className="text-right">Password</Label>
-              <div className="col-span-3">
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className={errors.password ? "border-red-500" : ""}
-                />
-                {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="password_confirmation" className="text-right">Confirm</Label>
-              <div className="col-span-3">
-                <Input
-                  id="password_confirmation"
-                  name="password_confirmation"
-                  type="password"
-                  value={formData.password_confirmation}
-                  onChange={handleChange}
-                  className={errors.password_confirmation ? "border-red-500" : ""}
-                />
-                {errors.password_confirmation && (
-                  <p className="text-red-500 text-sm mt-1">{errors.password_confirmation}</p>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create User'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Reset form when dialog opens
+    useEffect(() => {
+        if (isOpen) {
+            form.reset({
+                name: '',
+                email: '',
+                password: '',
+                role: undefined,
+            });
+        }
+    }, [isOpen, form]);
+
+    function onSubmit(data: CreateUserFormValues) {
+        setIsSubmitting(true);
+
+        // Map form data to the expected format for the API
+        const formData = {
+            name: data.name,
+            email: data.email,
+            password: data.password,
+            roles: data.role ? [data.role] : [], // Send the role as an array
+        };
+
+        router.post('/users', formData, {
+            onSuccess: () => {
+                form.reset();
+                onClose();
+                setIsSubmitting(false);
+            },
+            onError: (errors) => {
+                console.error('Create errors:', errors);
+                setIsSubmitting(false);
+                Object.keys(errors).forEach(key => {
+                    form.setError(key as keyof CreateUserFormValues, {
+                        type: 'manual',
+                        message: errors[key] as string
+                    });
+                });
+            }
+        });
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Create New User</DialogTitle>
+                    <DialogDescription>
+                        Add a new user and assign a role.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Name</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Full name" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="email"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Email</FormLabel>
+                                    <FormControl>
+                                        <Input type="email" placeholder="Email address" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="password"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Password</FormLabel>
+                                    <FormControl>
+                                        <Input type="password" placeholder="Password" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="role"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Role</FormLabel>
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                    >
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a role" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {roles.map(role => (
+                                                <SelectItem key={role.id} value={role.id}>
+                                                    {role.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting ? 'Creating...' : 'Create User'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 // Delete User Dialog
 export function DeleteUserDialog({
-  user,
-  isOpen,
-  onClose,
-  onConfirm
+    user,
+    isOpen,
+    onClose,
+    onConfirm
 }: {
-  user: User | null,
-  isOpen: boolean,
-  onClose: () => void,
-  onConfirm: () => void
+    user: User,
+    isOpen: boolean,
+    onClose: () => void,
+    onConfirm: () => void
 }) {
-  if (!user || !isOpen) return null;
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Delete User</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to delete this user? This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
 
-  // Safely get user properties with fallbacks
-  const userEmail = user?.email || 'No email';
+                <div className="py-4 space-y-2">
+                    <div className="space-y-1">
+                        <h4 className="text-sm font-medium">Name</h4>
+                        <p className="text-sm text-muted-foreground">{user.name}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <h4 className="text-sm font-medium">Email</h4>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <h4 className="text-sm font-medium">Roles</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {user.roles?.length > 0 ? (
+                                user.roles.map(role => (
+                                    <Badge key={role.id} variant="outline">
+                                        {role.name}
+                                    </Badge>
+                                ))
+                            ) : (
+                                <span className="text-sm text-muted-foreground">No roles assigned</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
 
-  // Create a safe wrapper for the confirmation handler
-  const handleConfirm = () => {
-    try {
-      onConfirm();
-    } catch (error) {
-      console.error("Error during delete confirmation:", error);
-      onClose();
-    }
-  };
-
-  return (
-    <AlertDialog open={isOpen} onOpenChange={(open) => {
-      if (!open) onClose();
-    }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This action will permanently delete the user with email <strong>{userEmail}</strong>.
-            This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-red-500 hover:bg-red-600"
-            onClick={handleConfirm}
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button type="button" variant="destructive" onClick={onConfirm}>
+                        Delete User
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
